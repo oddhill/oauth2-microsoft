@@ -8,6 +8,21 @@ use Psr\Http\Message\ResponseInterface;
 
 class Microsoft extends AbstractProvider
 {
+
+  /**
+   * Access token type 'Bearer'
+   *
+   * @var string
+   */
+  const ACCESS_TOKEN_TYPE_BEARER = 'Bearer';
+
+  /**
+   * No access token type
+   *
+   * @var string
+   */
+  const ACCESS_TOKEN_TYPE_NONE = '';
+
     /**
      * Default scopes
      *
@@ -20,21 +35,21 @@ class Microsoft extends AbstractProvider
      *
      * @var string
      */
-    protected $urlAuthorize = 'https://login.live.com/oauth20_authorize.srf';
+    protected $urlAuthorize = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
 
     /**
      * Base url for access token.
      *
      * @var string
      */
-    protected $urlAccessToken = 'https://login.live.com/oauth20_token.srf';
+    protected $urlAccessToken = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
 
     /**
      * Base url for resource owner.
      *
      * @var string
      */
-    protected $urlResourceOwnerDetails = 'https://apis.live.net/v5.0/me';
+    protected $urlResourceOwnerDetails = 'https://graph.microsoft.com/v1.0/me';
 
     /**
      * Get authorization url to begin OAuth flow
@@ -65,6 +80,17 @@ class Microsoft extends AbstractProvider
     {
         return $this->defaultScopes;
     }
+
+  /**
+   * Returns the string that should be used to separate scopes when building
+   * the URL for requesting an access token.
+   *
+   * @return string Scope separator, defaults to ' '
+   */
+  public function getScopeSeparator()
+  {
+    return ' ';
+  }
 
     /**
      * Check a provider response for errors.
@@ -106,7 +132,58 @@ class Microsoft extends AbstractProvider
     public function getResourceOwnerDetailsUrl(AccessToken $token)
     {
         $uri = new Uri($this->urlResourceOwnerDetails);
-
-        return (string) Uri::withQueryValue($uri, 'access_token', (string) $token);
+        return (string) $uri;
     }
+
+  /**
+   * Sets the access token type used for authorization.
+   *
+   * @param string The access token type to use.
+   */
+  public function setAccessTokenType($accessTokenType)
+  {
+    $this->accessTokenType = $accessTokenType;
+  }
+
+  /**
+   * Returns the authorization headers used by this provider.
+   *
+   * @param  mixed|null $token Either a string or an access token instance
+   * @return array
+   */
+  protected function getAuthorizationHeaders($token = null)
+  {
+    switch ($this->accessTokenType) {
+      case self::ACCESS_TOKEN_TYPE_BEARER:
+        return ['Authorization' => 'Bearer ' .  $token];
+      case self::ACCESS_TOKEN_TYPE_NONE:
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Requests resource owner details.
+   *
+   * @param  AccessToken $token
+   * @return mixed
+   */
+  protected function fetchResourceOwnerDetails(AccessToken $token)
+  {
+    $url = $this->getResourceOwnerDetailsUrl($token);
+    $this->setAccessTokenType(self::ACCESS_TOKEN_TYPE_BEARER);
+
+    $request = $this->getAuthenticatedRequest(self::METHOD_GET, $url, $token);
+
+    $response = $this->getParsedResponse($request);
+
+    if (false === is_array($response)) {
+      throw new UnexpectedValueException(
+        'Invalid response received from Authorization Server. Expected JSON.'
+      );
+    }
+
+    return $response;
+  }
+
 }
